@@ -46,6 +46,15 @@ SECTOR_WATCHLIST = {
 
 TRADER_WATCHLIST = sorted(list({ticker for ticker_list in SECTOR_WATCHLIST.values() for ticker in ticker_list}))
 
+# --- SIGNAL EXPLANATION DICTIONARY ---
+SIGNAL_EXPLANATIONS = {
+    "🛑 SAFETY SENTIMENT LOCK": "The asset has fallen into oversold territory, which normally triggers a put-selling opportunity. However, the live NLP engine detected severely negative news headlines. To protect against 'catching a falling knife' on a fundamentally damaged company, the system has locked execution.",
+    "🔥 OVERSOLD CSP REVERSION SIGNAL": "The asset has broken below its -2 StdDev VWAP band. Market panic artificially inflates Implied Volatility (IV) on puts. Selling a Cash-Secured Put here maximizes premium collection while providing a deep mathematical margin of safety.",
+    "🚀 NEWS MOMENTUM BREAKOUT SIGNAL": "The asset is breaking above its +2 StdDev VWAP band, fueled by extremely bullish news headlines. Instead of selling premium, the optimal mathematical play is to buy directional Call options to capture explosive upside momentum.",
+    "⚠️ RESISTANCE LEVEL COVERED CALL SIGNAL": "The asset has become overextended above its +2 VWAP band without accompanying bullish news to sustain a breakout. Selling an Out-of-the-Money Call capitalizes on over-inflated call premiums as the stock is mathematically likely to mean-revert downward.",
+    "⚠️ RANGE-BOUND PUT HARVEST SIGNAL": "The asset is trading in a neutral, healthy pattern close to its VWAP mean. Implied Volatility is stable. Selling a standard Delta-targeted Cash-Secured Put generates consistent premium yield while theta (time decay) slowly burns the contract value."
+}
+
 # --- STABLE RSS SENTIMENT FETCH ENGINE ---
 def fetch_stable_rss_headlines(symbol):
     headlines = []
@@ -330,15 +339,32 @@ if 'target_ticker' in locals():
                 breakeven_price = (opt_strike + execution_midpoint) if is_call_strategy else (opt_strike - execution_midpoint)
                 true_pop = calculate_probability_of_profit(spot, opt_strike, execution_midpoint, days_to_exp, opt_iv, is_call=is_call_strategy)
 
+            # ==========================================
+            # DYNAMIC ACTION HEADER & TOOLTIP POPOVER
+            # ==========================================
             col_rec_left, col_rec_right = st.columns([1.4, 1.1])
             with col_rec_left:
                 if not is_approved:
-                    st.error("🛑 RISK LOCK ENFORCED")
+                    sig_col1, sig_col2 = st.columns([0.85, 0.15])
+                    with sig_col1:
+                        st.error("🛑 RISK LOCK ENFORCED")
+                    with sig_col2:
+                        with st.popover("ℹ️ Logic"):
+                            st.markdown("**🛑 RISK LOCK ENFORCED**\n\nExecution is halted because the asset violated core capital liquidity or binary event constraints.")
                     st.code(f"MANDATE VIOLATION REJECTION:\n{block_reason}", language="text")
                 else:
-                    if "🛑" in rec_log_badge: st.error(f"🎯 {rec_log_badge}")
-                    elif "⚠️" in rec_log_badge: st.warning(f"🎯 {rec_log_badge}")
-                    else: st.success(f"🎯 {rec_log_badge}")
+                    rec_explanation = SIGNAL_EXPLANATIONS.get(rec_log_badge, "Standard execution routing logic applied based on current VWAP bands.")
+                    
+                    # Nested Columns for Badge + Interactive Popover Icon
+                    sig_col1, sig_col2 = st.columns([0.85, 0.15])
+                    with sig_col1:
+                        if "🛑" in rec_log_badge: st.error(f"🎯 {rec_log_badge}")
+                        elif "⚠️" in rec_log_badge: st.warning(f"🎯 {rec_log_badge}")
+                        else: st.success(f"🎯 {rec_log_badge}")
+                    with sig_col2:
+                        with st.popover("ℹ️ Logic"):
+                            st.markdown(f"**{rec_log_badge}**\n\n{rec_explanation}")
+                            
                     st.code(recommendation_action_text, language="text")
                     st.caption(f"🔒 Required Allocation: ${cash_reserve:,.2f} | 💰 Premium Yield Credit: ${premium_gain:,.2f}")
             
@@ -357,10 +383,11 @@ if 'target_ticker' in locals():
 
             st.divider()
 
+            # ==========================================
             # MIDDLE ROW DATA SEGMENTS
+            # ==========================================
             col_data_left, col_data_right = st.columns([1.1, 1.4])
             with col_data_left:
-                # 1. TRADE HEALTH PANEL (TOP LOADED)
                 st.subheader("📊 Trade Health & Pricing Efficiency")
                 if is_approved and selected_expiration:
                     m1, m2, m3 = st.columns(3)
@@ -381,7 +408,6 @@ if 'target_ticker' in locals():
                     
                 st.divider()
                 
-                # 2. UNDERWRITING RATIONALE LOG (POSITIONED IMMEDIATELY UNDER HEALTH MATRIX)
                 st.markdown("### 📝 Underwriting Diagnostic Rationale")
                 st.markdown(f"""
                 The option strategy selection mapping array for **{target_ticker}** was executed via the following programmatic parameters:
