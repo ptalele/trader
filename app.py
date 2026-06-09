@@ -48,7 +48,6 @@ TRADER_WATCHLIST = sorted(list({ticker for ticker_list in SECTOR_WATCHLIST.value
 
 # --- STABLE RSS SENTIMENT FETCH ENGINE ---
 def fetch_stable_rss_headlines(symbol):
-    """Fetches titles AND direct hyperlinks from the official Yahoo RSS Feed."""
     headlines = []
     try:
         url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
@@ -120,7 +119,6 @@ def calculate_black_scholes_delta(spot, strike, dte, iv, is_call=False, risk_fre
     return float(-norm.cdf(-d1))
 
 def calculate_probability_of_profit(spot, strike, premium, dte, iv, is_call=False, risk_free_rate=0.045):
-    """Calculates true POP by shifting the normal distribution curve to the exact Breakeven price."""
     if iv <= 0 or dte <= 0:
         return 0.0
     t = dte / 365.0
@@ -156,7 +154,6 @@ if 'target_ticker' in locals():
         underlying_equity = ETF_DECOMPOSITION_MAP[target_ticker]
         is_leveraged_etf = True
 
-    # Fetch data first before rendering the UI so we can extract the company name
     with st.spinner(f"Extracting streaming packets for {target_ticker}..."):
         market_data, error_msg = fetch_live_market_data(target_ticker)
         if is_leveraged_etf:
@@ -169,7 +166,6 @@ if 'target_ticker' in locals():
     elif market_data is None or market_data["spot"] is None:
         st.warning("Data Pipeline timed out. Verify ticker symbol architecture.")
     else:
-        # Safely extract payload variables
         spot = market_data["spot"]
         avg_volume = market_data["avg_volume"]
         company_name = market_data.get("company_name", target_ticker)
@@ -177,7 +173,6 @@ if 'target_ticker' in locals():
         tk = get_ticker_obj(target_ticker)
         earnings_dt = underlying_market_data["earnings_date"] if underlying_market_data else None
 
-        # Render dynamically populated Header
         st.markdown(f"## 👁️ Active Cockpit Target: **{target_ticker} | {company_name}**")
         tab_cockpit, tab_chain = st.tabs(["🎯 Underwriting Cockpit", "⛓️ Live Option Chain (5s Sync)"])
 
@@ -229,7 +224,6 @@ if 'target_ticker' in locals():
                     score_dict = sia.polarity_scores(title)
                     compound_scores.append(score_dict["compound"])
                     
-                    # Store data cleanly for the configured DataFrame columns
                     headline_log.append({
                         "Flashing Headline": title, 
                         "VADER Index Score": score_dict["compound"],
@@ -327,7 +321,6 @@ if 'target_ticker' in locals():
                     opt_delta = optimal_contract['calculated_delta']
                     opt_iv = optimal_contract['impliedVolatility']
 
-                # --- PROBABILITY OF PROFIT (POP) CALCULATION ---
                 cash_reserve = opt_strike * 100 * contracts
                 premium_gain = execution_midpoint * 100 * contracts
                 roc_return = (premium_gain / cash_reserve) * 100 if cash_reserve > 0 else 0
@@ -364,8 +357,10 @@ if 'target_ticker' in locals():
 
             st.divider()
 
+            # MIDDLE ROW DATA SEGMENTS
             col_data_left, col_data_right = st.columns([1.1, 1.4])
             with col_data_left:
+                # 1. TRADE HEALTH PANEL (TOP LOADED)
                 st.subheader("📊 Trade Health & Pricing Efficiency")
                 if is_approved and selected_expiration:
                     m1, m2, m3 = st.columns(3)
@@ -384,32 +379,9 @@ if 'target_ticker' in locals():
                     m6.metric("IV", f"{opt_iv:.1%}", "Premium Pricing Base", 
                               help="Implied Volatility. Higher IV inflates the premium you collect, but signals higher expected market turbulence.")
                     
-                    st.divider()
+                st.divider()
                 
-                st.subheader("📊 Live RSS News Headlines Analysis")
-                if headline_log:
-                    hl_df = pd.DataFrame(headline_log)
-                    
-                    # Render the DataFrame with a dedicated interactive Link Column
-                    st.dataframe(
-                        hl_df, 
-                        use_container_width=True, 
-                        hide_index=True,
-                        column_config={
-                            "Source": st.column_config.LinkColumn(
-                                "Source Link",
-                                help="Click to open the original Yahoo Finance article in a new tab.",
-                                display_text="Read Article ↗"
-                            ),
-                            "VADER Index Score": st.column_config.NumberColumn(
-                                "VADER Score",
-                                format="%.2f"
-                            )
-                        }
-                    )
-                else:
-                    st.caption("No public news releases detected within active session tracking buckets.")
-                
+                # 2. UNDERWRITING RATIONALE LOG (POSITIONED IMMEDIATELY UNDER HEALTH MATRIX)
                 st.markdown("### 📝 Underwriting Diagnostic Rationale")
                 st.markdown(f"""
                 The option strategy selection mapping array for **{target_ticker}** was executed via the following programmatic parameters:
@@ -426,8 +398,34 @@ if 'target_ticker' in locals():
                 fig.add_trace(go.Scatter(x=df_intraday.index, y=df_intraday['VWAP_Line'], name='VWAP Baseline', line=dict(color='#FFD700', width=2)))
                 fig.add_trace(go.Scatter(x=df_intraday.index, y=df_intraday['Lower_2'], name='-2 StdDev Band', line=dict(color='#FF4B4B', width=1.5, dash='dot')))
                 fig.add_trace(go.Scatter(x=df_intraday.index, y=df_intraday['Upper_2'], name='+2 StdDev Band', line=dict(color='#00CC66', width=1, dash='dot')))
-                fig.update_layout(template="plotly_dark", height=380, margin=dict(l=10, r=10, t=10, b=10), xaxis_rangeslider_visible=False, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0))
+                fig.update_layout(template="plotly_dark", height=400, margin=dict(l=10, r=10, t=10, b=10), xaxis_rangeslider_visible=False, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0))
                 st.plotly_chart(fig, use_container_width=True)
+
+            # ==========================================
+            # BASE SECTION: UNRESTRICTED HORIZONTAL NEWS GRID (FULL CONTAINER WIDTH)
+            # ==========================================
+            st.divider()
+            st.subheader("📊 Live RSS News Headlines Analysis")
+            if headline_log:
+                hl_df = pd.DataFrame(headline_log)
+                st.dataframe(
+                    hl_df, 
+                    use_container_width=True, 
+                    hide_index=True,
+                    column_config={
+                        "Source": st.column_config.LinkColumn(
+                            "Source Link",
+                            help="Click to open the original Yahoo Finance article in a new tab.",
+                            display_text="Read Article ↗"
+                        ),
+                        "VADER Index Score": st.column_config.NumberColumn(
+                            "VADER Score",
+                            format="%.2f"
+                        )
+                    }
+                )
+            else:
+                st.caption("No public news releases detected within active session tracking buckets.")
 
         with tab_chain:
             st.subheader(f"⛓️ Live Streaming Option Chain Grid: {target_ticker}")
