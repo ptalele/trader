@@ -48,6 +48,7 @@ TRADER_WATCHLIST = sorted(list({ticker for ticker_list in SECTOR_WATCHLIST.value
 
 # --- STABLE RSS SENTIMENT FETCH ENGINE ---
 def fetch_stable_rss_headlines(symbol):
+    """Fetches titles AND direct hyperlinks from the official Yahoo RSS Feed."""
     headlines = []
     try:
         url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
@@ -58,12 +59,14 @@ def fetch_stable_rss_headlines(symbol):
         root = ET.fromstring(xml_data)
         for item in root.findall('.//item')[:5]:
             title_text = item.find('title').text
-            if title_text:
-                headlines.append(title_text)
+            link_text = item.find('link').text
+            if title_text and link_text:
+                headlines.append({"title": title_text, "link": link_text})
     except Exception:
+        fallback_url = f"https://finance.yahoo.com/quote/{symbol}"
         headlines = [
-            f"Market volatility profiles tracking consistent inside normal ranges for {symbol}.",
-            f"Options open interest adjustments noted for institutional blocks trading {symbol} assets."
+            {"title": f"Market volatility profiles tracking consistent inside normal ranges for {symbol}.", "link": fallback_url},
+            {"title": f"Options open interest adjustments noted for institutional blocks trading {symbol} assets.", "link": fallback_url}
         ]
     return headlines
 
@@ -84,15 +87,25 @@ def fetch_live_market_data(symbol):
                 spot_price = hist_today['Close'].iloc[-1]
             else:
                 return None, f"Price feed unavailable for symbol {symbol}."
+        
         avg_vol = info.get("averageDailyVolume10Day") or info.get("volume") or 0
+        company_name = info.get("shortName") or info.get("longName") or symbol
         calendar = ticker_obj.calendar
         earnings_date = None
+        
         if calendar is not None and 'Earnings Date' in calendar:
             earnings_date = calendar['Earnings Date'][0]
         elif isinstance(calendar, dict) and 'earningsDate' in calendar:
             earnings_date = calendar['earningsDate'][0]
+            
         intraday_data = ticker_obj.history(period="1d", interval="5m")
-        return {"spot": spot_price, "avg_volume": avg_vol, "earnings_date": earnings_date, "intraday_df": intraday_data}, None
+        return {
+            "spot": spot_price, 
+            "avg_volume": avg_vol, 
+            "company_name": company_name,
+            "earnings_date": earnings_date, 
+            "intraday_df": intraday_data
+        }, None
     except Exception as e:
         return None, str(e)
 
@@ -137,15 +150,13 @@ contracts = st.sidebar.number_input("Vault Contracts", min_value=1, value=1, ste
 
 # --- INITIALIZE ANALYSIS COCKPIT PLATFORM ---
 if 'target_ticker' in locals():
-    st.markdown(f"## 👁️ Active Cockpit Target: **{target_ticker}**")
-    tab_cockpit, tab_chain = st.tabs(["🎯 Underwriting Cockpit", "⛓️ Live Option Chain (5s Sync)"])
-
     underlying_equity = target_ticker
     is_leveraged_etf = False
     if target_ticker in ETF_DECOMPOSITION_MAP:
         underlying_equity = ETF_DECOMPOSITION_MAP[target_ticker]
         is_leveraged_etf = True
 
+    # Fetch data first before rendering the UI so we can extract the company name
     with st.spinner(f"Extracting streaming packets for {target_ticker}..."):
         market_data, error_msg = fetch_live_market_data(target_ticker)
         if is_leveraged_etf:
@@ -158,11 +169,17 @@ if 'target_ticker' in locals():
     elif market_data is None or market_data["spot"] is None:
         st.warning("Data Pipeline timed out. Verify ticker symbol architecture.")
     else:
+        # Safely extract payload variables
         spot = market_data["spot"]
         avg_volume = market_data["avg_volume"]
+        company_name = market_data.get("company_name", target_ticker)
         df_intraday = market_data["intraday_df"]
         tk = get_ticker_obj(target_ticker)
         earnings_dt = underlying_market_data["earnings_date"] if underlying_market_data else None
+
+        # Render dynamically populated Header
+        st.markdown(f"## 👁️ Active Cockpit Target: **{target_ticker} | {company_name}**")
+        tab_cockpit, tab_chain = st.tabs(["🎯 Underwriting Cockpit", "⛓️ Live Option Chain (5s Sync)"])
 
         if len(df_intraday) == 0:
              time_slots = pd.date_range("09:30", "16:00", freq="5min")
@@ -200,16 +217,24 @@ if 'target_ticker' in locals():
                 block_reason = f"Imminent Earnings Collision: Underlying asset ({underlying_equity}) has an announcement on {earnings_dt} blocking option windows."
 
         with tab_cockpit:
-            rss_titles = fetch_stable_rss_headlines(target_ticker)
+            rss_data = fetch_stable_rss_headlines(target_ticker)
             sentiment_score = 0.0
             headline_log = []
             
-            if rss_titles:
+            if rss_data:
                 compound_scores = []
-                for title in rss_titles:
+                for item in rss_data:
+                    title = item["title"]
+                    link = item["link"]
                     score_dict = sia.polarity_scores(title)
                     compound_scores.append(score_dict["compound"])
-                    headline_log.append({"Flashing Headline": title, "VADER Index Score": score_dict["compound"]})
+                    
+                    # Store data cleanly for the configured DataFrame columns
+                    headline_log.append({
+                        "Flashing Headline": title, 
+                        "VADER Index Score": score_dict["compound"],
+                        "Source": link
+                    })
                 sentiment_score = float(np.mean(compound_scores))
 
             if sentiment_score >= 0.15:
@@ -341,7 +366,6 @@ if 'target_ticker' in locals():
 
             col_data_left, col_data_right = st.columns([1.1, 1.4])
             with col_data_left:
-                # --- POP INTEGRATED METRIC GRID WITH INFO ICONS ---
                 st.subheader("📊 Trade Health & Pricing Efficiency")
                 if is_approved and selected_expiration:
                     m1, m2, m3 = st.columns(3)
@@ -364,7 +388,25 @@ if 'target_ticker' in locals():
                 
                 st.subheader("📊 Live RSS News Headlines Analysis")
                 if headline_log:
-                    st.dataframe(pd.DataFrame(headline_log), use_container_width=True, hide_index=True)
+                    hl_df = pd.DataFrame(headline_log)
+                    
+                    # Render the DataFrame with a dedicated interactive Link Column
+                    st.dataframe(
+                        hl_df, 
+                        use_container_width=True, 
+                        hide_index=True,
+                        column_config={
+                            "Source": st.column_config.LinkColumn(
+                                "Source Link",
+                                help="Click to open the original Yahoo Finance article in a new tab.",
+                                display_text="Read Article ↗"
+                            ),
+                            "VADER Index Score": st.column_config.NumberColumn(
+                                "VADER Score",
+                                format="%.2f"
+                            )
+                        }
+                    )
                 else:
                     st.caption("No public news releases detected within active session tracking buckets.")
                 
