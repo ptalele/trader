@@ -15,3 +15,27 @@ Ensure your project contains the following operational directory layout:
 ├── app.py
 ├── requirements.txt
 └── README.md
+
+# Install core libraries
+pip install -r requirements.txt
+
+pip install nltk
+
+# Download the NLP sentiment lexicon library
+python -c "import nltk; nltk.download('vader_lexicon')"
+
+2. Configure Your Virtual Environment
+Open your system terminal and execute the following deployment sequence:
+
+# Create target sandbox container
+python3 -m venv ~/.venvs/dashboard
+
+# Activate environment parameters (Mac/Linux)
+source ~/.venvs/dashboard/bin/activate
+
+# Activate environment parameters (Windows PowerShell)
+# .\venv\Scripts\Activate.ps1
+
+3.
+streamlit run ~/app.py
+
