@@ -11,10 +11,10 @@ import nltk
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 
 # Force wide dashboard structure
-st.set_page_config(page_title="Trader | RSS Sentiment Underwriter", layout="wide")
+st.set_page_config(page_title="Trader | Advanced POP Underwriter", layout="wide")
 
 st.title("🦅 Trader Live Options Underwriting Cockpit")
-st.caption("Resilient Alpha Engine: RSS Headline Scrapers, Live Options Chains, and Automated Portfolio Safety Locks")
+st.caption("Resilient Alpha Engine: POP Math, RSS Scrapers, Live Options Chains, and Automated Safety Locks")
 
 # --- INITIALIZE NATURAL LANGUAGE SENTIMENT ANALYZER ---
 @st.cache_resource
@@ -46,26 +46,21 @@ SECTOR_WATCHLIST = {
 
 TRADER_WATCHLIST = sorted(list({ticker for ticker_list in SECTOR_WATCHLIST.values() for ticker in ticker_list}))
 
-# --- NEW STABLE RSS SENTIMENT FETCH ENGINE ---
+# --- STABLE RSS SENTIMENT FETCH ENGINE ---
 def fetch_stable_rss_headlines(symbol):
-    """Bypasses yfinance .news blocks by pulling directly from Yahoo Finance official RSS streams."""
     headlines = []
     try:
-        # Construct raw, unthrottled RSS target web URL
         url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={symbol}&region=US&lang=en-US"
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         req = urllib.request.Request(url, headers=headers)
-        
         with urllib.request.urlopen(req, timeout=5) as response:
             xml_data = response.read()
-            
         root = ET.fromstring(xml_data)
-        for item in root.findall('.//item')[:5]: # Cap strictly at top 5 flashing macro items
+        for item in root.findall('.//item')[:5]:
             title_text = item.find('title').text
             if title_text:
                 headlines.append(title_text)
     except Exception:
-        # Fallback backup block array
         headlines = [
             f"Market volatility profiles tracking consistent inside normal ranges for {symbol}.",
             f"Options open interest adjustments noted for institutional blocks trading {symbol} assets."
@@ -89,7 +84,6 @@ def fetch_live_market_data(symbol):
                 spot_price = hist_today['Close'].iloc[-1]
             else:
                 return None, f"Price feed unavailable for symbol {symbol}."
-                
         avg_vol = info.get("averageDailyVolume10Day") or info.get("volume") or 0
         calendar = ticker_obj.calendar
         earnings_date = None
@@ -97,18 +91,12 @@ def fetch_live_market_data(symbol):
             earnings_date = calendar['Earnings Date'][0]
         elif isinstance(calendar, dict) and 'earningsDate' in calendar:
             earnings_date = calendar['earningsDate'][0]
-            
         intraday_data = ticker_obj.history(period="1d", interval="5m")
-        
-        return {
-            "spot": spot_price,
-            "avg_volume": avg_vol,
-            "earnings_date": earnings_date,
-            "intraday_df": intraday_data
-        }, None
+        return {"spot": spot_price, "avg_volume": avg_vol, "earnings_date": earnings_date, "intraday_df": intraday_data}, None
     except Exception as e:
         return None, str(e)
 
+# --- MATH ENGINES ---
 def calculate_black_scholes_delta(spot, strike, dte, iv, is_call=False, risk_free_rate=0.045):
     if iv <= 0 or dte <= 0:
         return 0
@@ -118,12 +106,23 @@ def calculate_black_scholes_delta(spot, strike, dte, iv, is_call=False, risk_fre
         return float(norm.cdf(d1))
     return float(-norm.cdf(-d1))
 
+def calculate_probability_of_profit(spot, strike, premium, dte, iv, is_call=False, risk_free_rate=0.045):
+    """Calculates true POP by shifting the normal distribution curve to the exact Breakeven price."""
+    if iv <= 0 or dte <= 0:
+        return 0.0
+    t = dte / 365.0
+    if is_call:
+        breakeven = strike + premium
+        d2 = (np.log(spot / breakeven) + (risk_free_rate - (iv ** 2) / 2) * t) / (iv * np.sqrt(t))
+        return float(norm.cdf(-d2)) 
+    else:
+        breakeven = strike - premium
+        d2 = (np.log(spot / breakeven) + (risk_free_rate - (iv ** 2) / 2) * t) / (iv * np.sqrt(t))
+        return float(norm.cdf(d2)) 
+
 # --- SIDEBAR CONTROLS ---
 st.sidebar.header("🕹️ Sourcing Mode Configuration")
-sourcing_mode = st.sidebar.radio(
-    "Select Sourcing Input Method:",
-    options=["1. Current Ticker Symbol (Manual)", "2. Sector-Mapped Watchlist"]
-)
+sourcing_mode = st.sidebar.radio("Select Sourcing Input Method:", options=["1. Current Ticker Symbol (Manual)", "2. Sector-Mapped Watchlist"])
 
 if sourcing_mode == "1. Current Ticker Symbol (Manual)":
     target_ticker = st.sidebar.text_input("Enter Ticker Symbol", value="MUU").upper().strip()
@@ -139,7 +138,7 @@ contracts = st.sidebar.number_input("Vault Contracts", min_value=1, value=1, ste
 # --- INITIALIZE ANALYSIS COCKPIT PLATFORM ---
 if 'target_ticker' in locals():
     st.markdown(f"## 👁️ Active Cockpit Target: **{target_ticker}**")
-    tab_cockpit, tab_chain = st.tabs(["🎯 Underwriting Cockpit", "⛓️ Live Put Option Chain (5s Sync)"])
+    tab_cockpit, tab_chain = st.tabs(["🎯 Underwriting Cockpit", "⛓️ Live Option Chain (5s Sync)"])
 
     underlying_equity = target_ticker
     is_leveraged_etf = False
@@ -163,7 +162,6 @@ if 'target_ticker' in locals():
         avg_volume = market_data["avg_volume"]
         df_intraday = market_data["intraday_df"]
         tk = get_ticker_obj(target_ticker)
-        
         earnings_dt = underlying_market_data["earnings_date"] if underlying_market_data else None
 
         if len(df_intraday) == 0:
@@ -173,7 +171,6 @@ if 'target_ticker' in locals():
         if earnings_dt and isinstance(earnings_dt, (pd.Timestamp, datetime.datetime)):
             earnings_dt = earnings_dt.date()
 
-        # --- AUDIT COMPLIANCE STRATEGIES ---
         is_approved = True
         block_reason = ""
         if spot < 30.00:
@@ -198,16 +195,11 @@ if 'target_ticker' in locals():
                     selected_expiration = exp
                     days_to_exp = delta_days
                     break
-            
             if not selected_expiration and is_approved:
                 is_approved = False
                 block_reason = f"Imminent Earnings Collision: Underlying asset ({underlying_equity}) has an announcement on {earnings_dt} blocking option windows."
 
-        # ==========================================
-        # WORKSPACE 1: UNDERWRITING COCKPIT TAB
-        # ==========================================
         with tab_cockpit:
-            # 1. PARSE LIVE RSS FEED HEADLINES & SCORE SENTIMENT
             rss_titles = fetch_stable_rss_headlines(target_ticker)
             sentiment_score = 0.0
             headline_log = []
@@ -230,7 +222,6 @@ if 'target_ticker' in locals():
                 sentiment_state = "NEUTRAL NEWS"
                 sentiment_badge_style = "background-color: #4A4A4A; color: #FFFFFF; padding: 4px 14px; border-radius: 4px; font-weight: bold; font-size: 14px;"
 
-            # 2. Compute Intraday VWAP Curves
             df_intraday['Typical_Price'] = (df_intraday['High'] + df_intraday['Low'] + df_intraday['Close']) / 3
             df_intraday['Price_Vol'] = df_intraday['Typical_Price'] * df_intraday['Volume']
             df_intraday['VWAP_Line'] = df_intraday['Price_Vol'].cumsum() / df_intraday['Volume'].cumsum()
@@ -244,10 +235,12 @@ if 'target_ticker' in locals():
             current_upper_band = df_intraday['Upper_2'].iloc[-1]
             current_std = running_std.iloc[-1]
 
-            # 3. OPTIONS MATCH MATRIX & REGIME ASSIGNMENTS
             condition_state = "NEUTRAL"
             badge_style = "background-color: #4A4A4A; color: #FFFFFF; padding: 4px 14px; border-radius: 4px; font-weight: bold; font-size: 14px;"
-            opt_strike, execution_midpoint, opt_delta, roc_return, annual_yield, cash_reserve, premium_gain = 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+            
+            opt_strike, execution_midpoint, cash_reserve, premium_gain = 0.0, 0.0, 0.0, 0.0
+            opt_delta, opt_iv, true_pop, breakeven_price = 0.0, 0.0, 0.0, 0.0
+            roc_return, annual_yield = 0.0, 0.0
             recommendation_action_text = ""
             rec_log_badge = "✅ ALL METRICS CLEAR"
             
@@ -269,7 +262,9 @@ if 'target_ticker' in locals():
                         execution_midpoint = (optimal_contract['bid'] + optimal_contract['ask']) / 2 if optimal_contract['ask'] > optimal_contract['bid'] else optimal_contract['lastPrice']
                         recommendation_action_text = f"Sell to open PUT - {target_ticker} at {opt_strike:.0f} expiring on {selected_expiration} @ premium ${execution_midpoint:.2f}"
                         rec_log_badge = "🔥 OVERSOLD CSP REVERSION SIGNAL"
-
+                        opt_delta = optimal_contract['calculated_delta']
+                        opt_iv = optimal_contract['impliedVolatility']
+                        
                 elif current_price >= current_upper_band or sentiment_state == "BULLISH NEWS":
                     condition_state = "OVERBOUGHT" if current_price >= current_vwap else "MOMENTUM"
                     badge_style = "background-color: #FF4B4B; color: #FFFFFF; padding: 4px 14px; border-radius: 4px; font-weight: bold; font-size: 14px;" if condition_state=="OVERBOUGHT" else "background-color: #0073e6; color: #FFFFFF; padding: 4px 14px; border-radius: 4px; font-weight: bold; font-size: 14px;"
@@ -282,6 +277,8 @@ if 'target_ticker' in locals():
                         execution_midpoint = (optimal_contract['bid'] + optimal_contract['ask']) / 2 if optimal_contract['ask'] > optimal_contract['bid'] else optimal_contract['lastPrice']
                         recommendation_action_text = f"Buy to open CALL - {target_ticker} at {opt_strike:.0f} expiring on {selected_expiration} @ debit target ${execution_midpoint:.2f}"
                         rec_log_badge = "🚀 NEWS MOMENTUM BREAKOUT SIGNAL"
+                        opt_delta = optimal_contract['calculated_delta']
+                        opt_iv = optimal_contract['impliedVolatility']
                     else:
                         chain_matrix = raw_chain.calls
                         chain_matrix['calculated_delta'] = chain_matrix.apply(lambda r: calculate_black_scholes_delta(spot, r['strike'], days_to_exp, r['impliedVolatility'], is_call=True), axis=1)
@@ -291,7 +288,8 @@ if 'target_ticker' in locals():
                         execution_midpoint = (optimal_contract['bid'] + optimal_contract['ask']) / 2 if optimal_contract['ask'] > optimal_contract['bid'] else optimal_contract['lastPrice']
                         recommendation_action_text = f"Sell to open CALL - {target_ticker} at {opt_strike:.0f} expiring on {selected_expiration} @ premium ${execution_midpoint:.2f}"
                         rec_log_badge = "⚠️ RESISTANCE LEVEL COVERED CALL SIGNAL"
-
+                        opt_delta = optimal_contract['calculated_delta']
+                        opt_iv = optimal_contract['impliedVolatility']
                 else:
                     chain_matrix = raw_chain.puts
                     chain_matrix['calculated_delta'] = chain_matrix.apply(lambda r: calculate_black_scholes_delta(spot, r['strike'], days_to_exp, r['impliedVolatility'], is_call=False), axis=1)
@@ -301,13 +299,19 @@ if 'target_ticker' in locals():
                     execution_midpoint = (optimal_contract['bid'] + optimal_contract['ask']) / 2 if optimal_contract['ask'] > optimal_contract['bid'] else optimal_contract['lastPrice']
                     recommendation_action_text = f"Sell to open PUT - {target_ticker} at {opt_strike:.0f} expiring on {selected_expiration} @ premium ${execution_midpoint:.2f}"
                     rec_log_badge = "⚠️ RANGE-BOUND PUT HARVEST SIGNAL"
+                    opt_delta = optimal_contract['calculated_delta']
+                    opt_iv = optimal_contract['impliedVolatility']
 
+                # --- PROBABILITY OF PROFIT (POP) CALCULATION ---
                 cash_reserve = opt_strike * 100 * contracts
                 premium_gain = execution_midpoint * 100 * contracts
                 roc_return = (premium_gain / cash_reserve) * 100 if cash_reserve > 0 else 0
                 annual_yield = roc_return * (365 / days_to_exp) if days_to_exp > 0 else 0
 
-            # 🚀 RENDERING TOP ROW HEADER Blueprints
+                is_call_strategy = condition_state in ["OVERBOUGHT", "MOMENTUM"]
+                breakeven_price = (opt_strike + execution_midpoint) if is_call_strategy else (opt_strike - execution_midpoint)
+                true_pop = calculate_probability_of_profit(spot, opt_strike, execution_midpoint, days_to_exp, opt_iv, is_call=is_call_strategy)
+
             col_rec_left, col_rec_right = st.columns([1.4, 1.1])
             with col_rec_left:
                 if not is_approved:
@@ -335,27 +339,43 @@ if 'target_ticker' in locals():
 
             st.divider()
 
-            # MIDDLE ROW: LOGS AND TECHNICAL INTERFACES
             col_data_left, col_data_right = st.columns([1.1, 1.4])
             with col_data_left:
-                st.subheader("📊 Live RSS News Headlines Analysis Logs")
+                # --- POP INTEGRATED METRIC GRID WITH INFO ICONS ---
+                st.subheader("📊 Trade Health & Pricing Efficiency")
+                if is_approved and selected_expiration:
+                    m1, m2, m3 = st.columns(3)
+                    m1.metric("Target", f"{target_ticker}", f"Spot: ${spot:.2f}", 
+                              help="The core tracking asset and its current live trading price.")
+                    m2.metric("PoP", f"{true_pop:.1%}", f"Delta: {opt_delta:.2f}", delta_color="off", 
+                              help="Probability of Profit. Calculates the mathematical probability that the stock will close past your exact breakeven line at expiration, factoring in IV crush.")
+                    m3.metric("Breakeven", f"${breakeven_price:.2f}", f"Buffer: ${abs(spot - breakeven_price):.2f}", delta_color="off", 
+                              help="Your actual breakeven price. The buffer shows exactly how far the stock can move against your position before you begin taking a loss.")
+                    
+                    m4, m5, m6 = st.columns(3)
+                    m4.metric("RoC", f"{roc_return:.2f}%", f"{days_to_exp} DTE Window", 
+                              help="Return on Capital. The percentage yield generated directly on the collateral required to open the trade.")
+                    m5.metric("Annual Yield", f"{annual_yield:.2f}%", "Compounded Runway", 
+                              help="Extrapolates your short-term RoC to a theoretical 1-year (365 day) runway if this trade structure was deployed continuously.")
+                    m6.metric("IV", f"{opt_iv:.1%}", "Premium Pricing Base", 
+                              help="Implied Volatility. Higher IV inflates the premium you collect, but signals higher expected market turbulence.")
+                    
+                    st.divider()
+                
+                st.subheader("📊 Live RSS News Headlines Analysis")
                 if headline_log:
                     st.dataframe(pd.DataFrame(headline_log), use_container_width=True, hide_index=True)
                 else:
                     st.caption("No public news releases detected within active session tracking buckets.")
                 
                 st.markdown("### 📝 Underwriting Diagnostic Rationale")
-                st.markdown(
-                    f"""
-                    The option strategy selection mapping array for **{target_ticker}** was executed via the following programmatic parameters:
-                    
-                    * **Decomposition Status Check:** Asset **{target_ticker}** has been cross-examined. If listed as a derivative asset, parameters track back to parent equity token (**{underlying_equity}**).
-                    
-                    * **Earning Boundary Status:** Core component profile **{underlying_equity}** registers a next earnings release date target of **{earnings_dt}**.
-                    
-                    * **Compliance State Summary:** The active asset deployment window has flags evaluated at: **is_approved = {is_approved}**. If set to false, it indicates that a key regulatory constraint (under $30 spot price barrier, low volume, or impending earnings date collapse) has triggered an absolute safety shutdown on your trading order line.
-                    """
-                )
+                st.markdown(f"""
+                The option strategy selection mapping array for **{target_ticker}** was executed via the following programmatic parameters:
+                * **True POP Margin:** Delta underestimates your safety cushion. This engine calculates your POP based on the adjusted *Breakeven Price* (Strike minus Premium), factoring in IV crush.
+                * **Decomposition Status Check:** Asset **{target_ticker}** has been cross-examined. If listed as a derivative asset, parameters track back to parent equity token (**{underlying_equity}**).
+                * **Earning Boundary Status:** Core component profile **{underlying_equity}** registers a next earnings release date target of **{earnings_dt}**.
+                * **Compliance State Summary:** The active asset deployment window has flags evaluated at: **is_approved = {is_approved}**. If set to false, it indicates that a key regulatory constraint (under $30 spot price barrier, low volume, or impending earnings date collapse) has triggered an absolute safety shutdown on your trading order line.
+                """)
 
             with col_data_right:
                 st.subheader("📈 Technical Chart Core View")
@@ -367,16 +387,12 @@ if 'target_ticker' in locals():
                 fig.update_layout(template="plotly_dark", height=380, margin=dict(l=10, r=10, t=10, b=10), xaxis_rangeslider_visible=False, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0))
                 st.plotly_chart(fig, use_container_width=True)
 
-        # ==========================================
-        # WORKSPACE 2: OPTIONS CHAIN TAB
-        # ==========================================
         with tab_chain:
             st.subheader(f"⛓️ Live Streaming Option Chain Grid: {target_ticker}")
             if not all_expirations:
                 st.warning("No active option expirations found for this ticker asset.")
             else:
                 chosen_expiry = st.selectbox("Select Chain Expiration Target:", options=all_expirations, index=0)
-                
                 @st.fragment(run_every=5)
                 def render_streaming_options_fragment(ticker_symbol, expiry_date_str):
                     current_tk = yf.Ticker(ticker_symbol)
@@ -392,5 +408,4 @@ if 'target_ticker' in locals():
                         st.dataframe(final_grid.style.format({'Strike Price': '${:.2f}', 'Bid (Buy)': '${:.2f}', 'Ask (Sell)': '${:.2f}', 'Spread': '${:.2f}', 'Last Close': '${:.2f}', 'Implied Volatility (IV)': '{:.2%}'}), use_container_width=True, hide_index=True)
                     except Exception as ex:
                         st.error(f"Intraday order book parsing timeout: {str(ex)}")
-                        
                 render_streaming_options_fragment(target_ticker, chosen_expiry)
