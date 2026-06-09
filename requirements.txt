@@ -2,7 +2,7 @@ streamlit
 yfinance
 pandas
 pandas-ta
-numpy<2.0
+numpy
 plotly
 scipy
 nltk
