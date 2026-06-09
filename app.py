@@ -140,6 +140,21 @@ def calculate_probability_of_profit(spot, strike, premium, dte, iv, is_call=Fals
         d2 = (np.log(spot / breakeven) + (risk_free_rate - (iv ** 2) / 2) * t) / (iv * np.sqrt(t))
         return float(norm.cdf(d2)) 
 
+# --- HELPER FUNCTION: HTML CLICKABLE BANNER ---
+def render_clickable_banner(badge_text, explanation_text, bg_color):
+    """Renders a custom HTML/CSS clickable expansion block matching Streamlit's UI."""
+    html_block = f"""
+    <details style="background-color: {bg_color}; color: white; padding: 14px 16px; border-radius: 8px; margin-bottom: 16px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <summary style="font-weight: bold; font-size: 16px;">
+            🎯 {badge_text} <span style="font-size: 13px; font-weight: normal; opacity: 0.85; margin-left: 8px;">(Click for Logic)</span>
+        </summary>
+        <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3); font-size: 14px; line-height: 1.5;">
+            <strong>Action Rationale:</strong><br>{explanation_text}
+        </div>
+    </details>
+    """
+    st.markdown(html_block, unsafe_allow_html=True)
+
 # --- SIDEBAR CONTROLS ---
 st.sidebar.header("🕹️ Sourcing Mode Configuration")
 sourcing_mode = st.sidebar.radio("Select Sourcing Input Method:", options=["1. Current Ticker Symbol (Manual)", "2. Sector-Mapped Watchlist"])
@@ -345,14 +360,27 @@ if 'target_ticker' in locals():
             col_rec_left, col_rec_right = st.columns([1.4, 1.1])
             with col_rec_left:
                 if not is_approved:
-                    with st.popover("🛑 RISK LOCK ENFORCED (Click for Logic)", use_container_width=True):
-                        st.markdown("**Execution Halted:** The asset violated core capital, liquidity, or binary event constraints.")
+                    render_clickable_banner(
+                        "🛑 RISK LOCK ENFORCED", 
+                        "Execution is halted because the asset violated core capital liquidity or binary event constraints.", 
+                        "#FF4B4B"
+                    )
                     st.code(f"MANDATE VIOLATION REJECTION:\n{block_reason}", language="text")
                 else:
+                    # Dynamically map the color based on the active signal
+                    if "🛑" in rec_log_badge:
+                        bg_color = "#FF4B4B" # Red
+                    elif "🔥" in rec_log_badge:
+                        bg_color = "#00CC66" # Green
+                    elif "🚀" in rec_log_badge:
+                        bg_color = "#0073e6" # Blue
+                    else:
+                        bg_color = "#B8860B" # Dark Goldenrod / Warning
+
                     rec_explanation = SIGNAL_EXPLANATIONS.get(rec_log_badge, "Standard execution routing logic applied based on current VWAP bands.")
                     
-                    with st.popover(f"🎯 {rec_log_badge} (Click for Logic)", use_container_width=True):
-                        st.markdown(f"**Action Rationale:**\n\n{rec_explanation}")
+                    # Render the beautiful custom HTML Dropdown Banner
+                    render_clickable_banner(rec_log_badge, rec_explanation, bg_color)
                             
                     st.code(recommendation_action_text, language="text")
                     st.caption(f"🔒 Required Allocation: ${cash_reserve:,.2f} | 💰 Premium Yield Credit: ${premium_gain:,.2f}")
