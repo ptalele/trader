@@ -165,7 +165,7 @@ def render_clickable_banner(badge_text, explanation_text, bg_color):
     html_block = f"""
     <details style="background-color: {bg_color}; color: white; padding: 14px 16px; border-radius: 8px; margin-bottom: 16px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
         <summary style="font-weight: bold; font-size: 16px;">
-            🎯 {badge_text} <span style="font-size: 13px; font-weight: normal; opacity: 0.85; margin-left: 8px;">(Click for Logic)</span>
+            🎯 {badge_text} <span style="font-size: 13px; font-weight: normal; opacity: 0.85; margin-left: 8px;">(Why?)</span>
         </summary>
         <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.3); font-size: 14px; line-height: 1.5;">
             <strong>Action Rationale:</strong><br>{explanation_text}
