@@ -42,11 +42,8 @@ def check_password():
 if not check_password():
     st.stop()
 # ==========================================
-
-st.caption("Resilient Alpha Engine: Multi-Factor Math Matrix, RSS Scrapers, and Automated Safety Locks")
-
 # Force wide dashboard structure
-st.set_page_config(page_title="Trader | Advanced Matrix Underwriter", layout="wide")
+st.set_page_config(page_title="Trader | Advanced Underwriter", layout="wide")
 
 st.title("🦅 Trader Live Options Underwriting Cockpit")
 st.caption("Resilient Alpha Engine: Multi-Factor Math Matrix, RSS Scrapers, and Automated Safety Locks")
@@ -69,7 +66,7 @@ ETF_DECOMPOSITION_MAP = {
 }
 
 SECTOR_WATCHLIST = {
-    "Technology & Semiconductors": ["AAPL", "MSFT", "NVDA", "AVGO", "ADBE", "AMD", "CRM", "CSCO", "TXN", "INTC", "QCOM", "AMAT", "LRCX", "ADI", "PANW", "MU", "ORCL", "IBM", "INTU"],
+    "Technology & Semiconductors": ["AAPL", "SNDK", "TSM", "ASML", "INTC", "MRVL", "WDC", "MSFT", "NVDA", "AVGO", "ADBE", "AMD", "CRM", "CSCO", "TXN", "INTC", "QCOM", "AMAT", "LRCX", "ADI", "PANW", "MU", "ORCL", "IBM", "INTU"],
     "Communication Services & Internet": ["GOOGL", "META", "NFLX", "CMCSA", "VZ", "XLC", "PM"],
     "Financial Services & Banking": ["JPM", "BAC", "WFC", "GS", "MS", "AXP", "C", "XLF"],
     "Consumer Cyclical & Retail": ["AMZN", "TSLA", "HD", "COST", "MCD", "WMT", "LOW", "SBUX", "TJX", "BKNG", "XLY"],
