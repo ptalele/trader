@@ -43,7 +43,6 @@ if not check_password():
     st.stop()
 # ==========================================
 
-st.title("🦅 Trader Live Options Underwriting Cockpit")
 st.caption("Resilient Alpha Engine: Multi-Factor Math Matrix, RSS Scrapers, and Automated Safety Locks")
 
 # Force wide dashboard structure
