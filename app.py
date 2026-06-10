@@ -14,6 +14,41 @@ from nltk.sentiment.vader import SentimentIntensityAnalyzer
 # Force wide dashboard structure
 st.set_page_config(page_title="Trader | Advanced Matrix Underwriter", layout="wide")
 
+# ==========================================
+# QUICK AUTHENTICATION BLOCK
+# ==========================================
+def check_password():
+    """Returns `True` if the user had the correct password."""
+    def password_entered():
+        # Validates against Streamlit secrets (fallback to 'admin' if secret isn't set)
+        if st.session_state["password"] == st.secrets.get("password", "admin"):
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Security: don't retain the password in state
+        else:
+            st.session_state["password_correct"] = False
+
+    if "password_correct" not in st.session_state:
+        st.title("🔒 Authentication Required")
+        st.text_input("Enter password to access the Engine:", type="password", on_change=password_entered, key="password")
+        return False
+    elif not st.session_state["password_correct"]:
+        st.title("🔒 Authentication Required")
+        st.text_input("Enter password to access the Engine:", type="password", on_change=password_entered, key="password")
+        st.error("🚨 Incorrect password. Access denied.")
+        return False
+    return True
+
+# Stop execution if not authenticated
+if not check_password():
+    st.stop()
+# ==========================================
+
+st.title("🦅 Trader Live Options Underwriting Cockpit")
+st.caption("Resilient Alpha Engine: Multi-Factor Math Matrix, RSS Scrapers, and Automated Safety Locks")
+
+# Force wide dashboard structure
+st.set_page_config(page_title="Trader | Advanced Matrix Underwriter", layout="wide")
+
 st.title("🦅 Trader Live Options Underwriting Cockpit")
 st.caption("Resilient Alpha Engine: Multi-Factor Math Matrix, RSS Scrapers, and Automated Safety Locks")
 
