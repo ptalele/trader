@@ -15,15 +15,14 @@ from nltk.sentiment.vader import SentimentIntensityAnalyzer
 st.set_page_config(page_title="Trader | Advanced Matrix Underwriter", layout="wide")
 
 # ==========================================
-# QUICK AUTHENTICATION BLOCK
+# 1. QUICK AUTHENTICATION BLOCK
 # ==========================================
 def check_password():
     """Returns `True` if the user had the correct password."""
     def password_entered():
-        # Validates against Streamlit secrets (fallback to 'admin' if secret isn't set)
         if st.session_state["password"] == st.secrets.get("password", "admin"):
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # Security: don't retain the password in state
+            del st.session_state["password"]  
         else:
             st.session_state["password_correct"] = False
 
@@ -38,33 +37,15 @@ def check_password():
         return False
     return True
 
-# Stop execution if not authenticated
 if not check_password():
     st.stop()
-# ==========================================
 
+# ==========================================
+# 2. CORE MAPS & SENTIMENT ENGINE
+# ==========================================
 st.title("🦅 Trader Live Options Underwriting Cockpit")
 st.caption("Resilient Alpha Engine: Multi-Factor Math Matrix, RSS Scrapers, and Automated Safety Locks")
 
-# ==========================================
-# QUICK ASSET SELECTION ROW
-# ==========================================
-st.markdown("### 🔍 Quick Asset Selection")
-
-if "selected_ticker" not in st.session_state:
-    st.session_state.selected_ticker = "NVDA"
-
-quick_tickers = ["NVDA", "MU", "AMD", "MSFT", "AAPL", "GOOGL", "META", "TSLA", "QQQ", "SPY"]
-tick_cols = st.columns(len(quick_tickers))
-for idx, ticker in enumerate(quick_tickers):
-    with tick_cols[idx]:
-        if st.button(ticker, use_container_width=True):
-            st.session_state.selected_ticker = ticker
-            st.rerun()
-
-st.divider()
-
-# --- INITIALIZE NATURAL LANGUAGE SENTIMENT ANALYZER ---
 @st.cache_resource
 def load_sentiment_analyzer():
     try:
@@ -75,14 +56,13 @@ def load_sentiment_analyzer():
 
 sia = load_sentiment_analyzer()
 
-# --- LEVERAGED DERIVATIVE ETF TO CORE TICKER MAP ---
 ETF_DECOMPOSITION_MAP = {
     "MUU": "MU", "USD": "NVDA", "NVDL": "NVDA", "TSLL": "TSLA",
     "AAPU": "AAPL", "AMZU": "AMZN", "MSFU": "MSFT", "GGLL": "GOOGL", "FBL": "META"
 }
 
 SECTOR_WATCHLIST = {
-    "Technology & Semiconductors": ["AAPL", "SNDK", "TSM", "ASML", "INTC", "MRVL", "WDC", "MSFT", "NVDA", "AVGO", "ADBE", "AMD", "CRM", "CSCO", "TXN", "INTC", "QCOM", "AMAT", "LRCX", "ADI", "PANW", "MU", "ORCL", "IBM", "INTU"],
+    "Technology & Semiconductors": ["AAPL", "SNDK", "TSM", "ASML", "INTC", "MRVL", "WDC", "MSFT", "NVDA", "AVGO", "ADBE", "AMD", "CRM", "CSCO", "TXN", "QCOM", "AMAT", "LRCX", "ADI", "PANW", "MU", "ORCL", "IBM", "INTU"],
     "Communication Services & Internet": ["GOOGL", "META", "NFLX", "CMCSA", "VZ", "XLC", "PM"],
     "Financial Services & Banking": ["JPM", "BAC", "WFC", "GS", "MS", "AXP", "C", "XLF"],
     "Consumer Cyclical & Retail": ["AMZN", "TSLA", "HD", "COST", "MCD", "WMT", "LOW", "SBUX", "TJX", "BKNG", "XLY"],
@@ -94,7 +74,6 @@ SECTOR_WATCHLIST = {
 
 TRADER_WATCHLIST = sorted(list({ticker for ticker_list in SECTOR_WATCHLIST.values() for ticker in ticker_list}))
 
-# --- SIGNAL EXPLANATION DICTIONARY ---
 SIGNAL_EXPLANATIONS = {
     "🛑 SAFETY SENTIMENT LOCK": "The asset is oversold, but the NLP engine detected severely negative headlines. To protect against 'catching a falling knife', execution is locked.",
     "🔥 HIGH-CONVICTION OVERSOLD PUT SIGNAL": "The asset broke below the -2 StdDev VWAP band, RSI confirms oversold conditions, and CMF shows institutional support. Selling a Cash-Secured Put maximizes premium collection with strong mathematical safety.",
@@ -104,7 +83,6 @@ SIGNAL_EXPLANATIONS = {
     "🛑 CONFLICTING INTERNAL MATRIX": "VWAP positioning contradicts momentum (RSI/MACD) or volume flows (CMF). The engine recommends staying entirely in cash until indicators align."
 }
 
-# --- STABLE RSS SENTIMENT FETCH ENGINE ---
 def fetch_stable_rss_headlines(symbol):
     headlines = []
     try:
@@ -123,7 +101,6 @@ def fetch_stable_rss_headlines(symbol):
         pass
     return headlines
 
-# --- DATA STREAM PIPELINES ---
 @st.cache_resource(ttl=60)
 def get_ticker_obj(symbol):
     return yf.Ticker(symbol)
@@ -151,7 +128,6 @@ def fetch_live_market_data(symbol):
         elif isinstance(calendar, dict) and 'earningsDate' in calendar:
             earnings_date = calendar['earningsDate'][0]
             
-        # Fetching 5 days of 5-minute data to ensure enough periods for MACD/RSI warmup calculations
         intraday_data = ticker_obj.history(period="5d", interval="5m")
         return {
             "spot": spot_price, 
@@ -163,7 +139,6 @@ def fetch_live_market_data(symbol):
     except Exception as e:
         return None, str(e)
 
-# --- MATH ENGINES ---
 def calculate_black_scholes_delta(spot, strike, dte, iv, is_call=False, risk_free_rate=0.045):
     if iv <= 0 or dte <= 0: return 0
     t = dte / 365.0
@@ -190,12 +165,18 @@ def render_clickable_banner(badge_text, explanation_text, bg_color):
     """
     st.markdown(html_block, unsafe_allow_html=True)
 
-# --- SIDEBAR CONTROLS ---
+# ==========================================
+# 3. SIDEBAR CONTROLS & STATE SYNC
+# ==========================================
+# We process the sidebar FIRST so the top row can dynamically catch new searches.
 st.sidebar.header("🕹️ Sourcing Mode Configuration")
 sourcing_mode = st.sidebar.radio("Select Sourcing Input Method:", options=["1. Current Ticker Symbol (Manual)", "2. Sector-Mapped Watchlist"])
 
+if "selected_ticker" not in st.session_state:
+    st.session_state.selected_ticker = "NVDA"
+
 if sourcing_mode == "1. Current Ticker Symbol (Manual)":
-    target_ticker = st.sidebar.text_input("Enter Ticker Symbol", value=st.session_state.get("selected_ticker", "NVDA")).upper().strip()
+    target_ticker = st.sidebar.text_input("Enter Ticker Symbol", value=st.session_state.selected_ticker).upper().strip()
 else:
     chosen_sector = st.sidebar.selectbox("Filter Watchlist by Sector Menu:", options=list(SECTOR_WATCHLIST.keys()))
     target_ticker = st.sidebar.selectbox("Select Target Ticker Symbol:", options=SECTOR_WATCHLIST[chosen_sector])
@@ -211,11 +192,39 @@ strategy_filter = st.sidebar.radio(
     help="Filters the underwriting logic outputs based on directional type preference."
 )
 
-min_dte = st.sidebar.slider("Minimum DTE Window", min_value=15, max_value=45, value=30)
+min_dte = st.sidebar.slider("Minimum DTE Window", min_value=2, max_value=45, value=30)
 max_dte = st.sidebar.slider("Maximum DTE Window", min_value=35, max_value=90, value=45)
 contracts = st.sidebar.number_input("Vault Contracts", min_value=1, value=1, step=1)
 
-# --- INITIALIZE ANALYSIS COCKPIT PLATFORM ---
+# ==========================================
+# 4. DYNAMIC QUICK ASSET SELECTION ROW
+# ==========================================
+st.markdown("### 🔍 Quick Asset Selection")
+
+# Initialize the dynamic list if it doesn't exist yet
+if "quick_tickers" not in st.session_state:
+    st.session_state.quick_tickers = ["NVDA", "MU", "AMD", "MSFT", "AAPL", "GOOGL", "META", "TSLA", "QQQ", "SPY"]
+
+# Auto-add the newly searched ticker to the front of the list if it's not already there
+if target_ticker and target_ticker not in st.session_state.quick_tickers:
+    st.session_state.quick_tickers.insert(0, target_ticker)
+    # Pop the oldest one off the end to keep the layout at a strict 10 buttons
+    if len(st.session_state.quick_tickers) > 10:
+        st.session_state.quick_tickers.pop()
+
+# Render the row
+tick_cols = st.columns(len(st.session_state.quick_tickers))
+for idx, ticker in enumerate(st.session_state.quick_tickers):
+    with tick_cols[idx]:
+        if st.button(ticker, use_container_width=True):
+            st.session_state.selected_ticker = ticker
+            st.rerun()
+
+st.divider()
+
+# ==========================================
+# 5. INITIALIZE ANALYSIS COCKPIT PLATFORM
+# ==========================================
 if 'target_ticker' in locals():
     underlying_equity = target_ticker
     is_leveraged_etf = False
@@ -327,7 +336,7 @@ if 'target_ticker' in locals():
             df_intraday.ta.atr(length=14, append=True)
             df_intraday.ta.cmf(length=20, append=True)
             
-            # Extract current state (handling potential NaNs from early warmup periods)
+            # Extract current state
             valid_df = df_intraday.dropna()
             if not valid_df.empty:
                 current_price = valid_df['Close'].iloc[-1]
@@ -425,7 +434,7 @@ if 'target_ticker' in locals():
                 true_pop = calculate_probability_of_profit(spot, opt_strike, execution_midpoint, days_to_exp, opt_iv, is_call=is_call_strategy)
 
             # ==========================================
-            # DYNAMIC ACTION HEADER WITH CLICKABLE BANNER & FILTER
+            # DYNAMIC ACTION HEADER WITH CLICKABLE BANNER
             # ==========================================
             is_filter_matched = True
             if strategy_filter == "Calls Only" and "CALL" not in rec_log_badge.upper():
@@ -533,9 +542,6 @@ if 'target_ticker' in locals():
                         st.error(f"Intraday order book parsing timeout: {str(ex)}")
                 render_streaming_options_fragment(target_ticker, chosen_expiry)
 
-        # ==========================================
-        # NEW WORKSPACE 3: ENGINE MATH & LOGIC TAB
-        # ==========================================
         with tab_math:
             st.subheader("🧮 Quantitative Matrix Overview")
             st.markdown("This underwriting engine evaluates trades through a multi-dimensional matrix. It pairs lagging institutional accumulation metrics with leading momentum oscillators to output high-conviction signals.")
