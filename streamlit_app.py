@@ -42,11 +42,27 @@ def check_password():
 if not check_password():
     st.stop()
 # ==========================================
-# Force wide dashboard structure
-st.set_page_config(page_title="Trader | Advanced Underwriter", layout="wide")
 
 st.title("🦅 Trader Live Options Underwriting Cockpit")
 st.caption("Resilient Alpha Engine: Multi-Factor Math Matrix, RSS Scrapers, and Automated Safety Locks")
+
+# ==========================================
+# QUICK ASSET SELECTION ROW
+# ==========================================
+st.markdown("### 🔍 Quick Asset Selection")
+
+if "selected_ticker" not in st.session_state:
+    st.session_state.selected_ticker = "NVDA"
+
+quick_tickers = ["NVDA", "MU", "AMD", "MSFT", "AAPL", "GOOGL", "META", "TSLA", "QQQ", "SPY"]
+tick_cols = st.columns(len(quick_tickers))
+for idx, ticker in enumerate(quick_tickers):
+    with tick_cols[idx]:
+        if st.button(ticker, use_container_width=True):
+            st.session_state.selected_ticker = ticker
+            st.rerun()
+
+st.divider()
 
 # --- INITIALIZE NATURAL LANGUAGE SENTIMENT ANALYZER ---
 @st.cache_resource
@@ -179,12 +195,22 @@ st.sidebar.header("🕹️ Sourcing Mode Configuration")
 sourcing_mode = st.sidebar.radio("Select Sourcing Input Method:", options=["1. Current Ticker Symbol (Manual)", "2. Sector-Mapped Watchlist"])
 
 if sourcing_mode == "1. Current Ticker Symbol (Manual)":
-    target_ticker = st.sidebar.text_input("Enter Ticker Symbol", value="MUU").upper().strip()
+    target_ticker = st.sidebar.text_input("Enter Ticker Symbol", value=st.session_state.get("selected_ticker", "NVDA")).upper().strip()
 else:
     chosen_sector = st.sidebar.selectbox("Filter Watchlist by Sector Menu:", options=list(SECTOR_WATCHLIST.keys()))
     target_ticker = st.sidebar.selectbox("Select Target Ticker Symbol:", options=SECTOR_WATCHLIST[chosen_sector])
 
+st.session_state.selected_ticker = target_ticker
+
 st.sidebar.header("🎯 Underwriting Parameters")
+
+strategy_filter = st.sidebar.radio(
+    "Matrix Strategy Filter:",
+    options=["All Recommendations", "Calls Only", "Puts Only"],
+    index=0,
+    help="Filters the underwriting logic outputs based on directional type preference."
+)
+
 min_dte = st.sidebar.slider("Minimum DTE Window", min_value=15, max_value=45, value=30)
 max_dte = st.sidebar.slider("Maximum DTE Window", min_value=35, max_value=90, value=45)
 contracts = st.sidebar.number_input("Vault Contracts", min_value=1, value=1, step=1)
@@ -228,12 +254,20 @@ if 'target_ticker' in locals():
 
         is_approved = True
         block_reason = ""
+        
+        # 7-DAY EARNINGS BLOCKOUT CHECK
+        if earnings_dt and isinstance(earnings_dt, datetime.date):
+            days_to_earnings = (earnings_dt - datetime.date.today()).days
+            if 0 <= days_to_earnings <= 7:
+                is_approved = False
+                block_reason += f"Binary Event Risk: Earnings report in exactly {days_to_earnings} days.\n"
+
         if spot < 30.00:
             is_approved = False
-            block_reason = f"Spot valuation (${spot:.2f}) drops below $30 thresholds."
+            block_reason += f"Spot valuation (${spot:.2f}) drops below $30 thresholds.\n"
         elif avg_volume < 1000000:
             is_approved = False
-            block_reason = f"Institutional Liquidity Alert: 10-day volume ({avg_volume:,}) below 1M share requirement."
+            block_reason += f"Institutional Liquidity Alert: 10-day volume ({avg_volume:,}) below 1M share requirement.\n"
 
         all_expirations = tk.options
         selected_expiration = None
@@ -252,7 +286,7 @@ if 'target_ticker' in locals():
                     break
             if not selected_expiration and is_approved:
                 is_approved = False
-                block_reason = f"Imminent Earnings Collision: Underlying asset ({underlying_equity}) has an announcement on {earnings_dt} blocking option windows."
+                block_reason += f"Imminent Earnings Collision: Underlying asset ({underlying_equity}) has an announcement on {earnings_dt} blocking option windows."
 
         with tab_cockpit:
             rss_data = fetch_stable_rss_headlines(target_ticker)
@@ -391,13 +425,22 @@ if 'target_ticker' in locals():
                 true_pop = calculate_probability_of_profit(spot, opt_strike, execution_midpoint, days_to_exp, opt_iv, is_call=is_call_strategy)
 
             # ==========================================
-            # DYNAMIC ACTION HEADER WITH CLICKABLE BANNER
+            # DYNAMIC ACTION HEADER WITH CLICKABLE BANNER & FILTER
             # ==========================================
+            is_filter_matched = True
+            if strategy_filter == "Calls Only" and "CALL" not in rec_log_badge.upper():
+                is_filter_matched = False
+            elif strategy_filter == "Puts Only" and "PUT" not in rec_log_badge.upper():
+                is_filter_matched = False
+
             col_rec_left, col_rec_right = st.columns([1.4, 1.1])
             with col_rec_left:
                 if not is_approved:
                     render_clickable_banner("🛑 RISK LOCK ENFORCED", "Execution is halted because the asset violated core capital liquidity or binary event constraints.", "#FF4B4B")
                     st.code(f"MANDATE VIOLATION REJECTION:\n{block_reason}", language="text")
+                elif not is_filter_matched:
+                    render_clickable_banner("ℹ️ STRATEGY FILTER ACTIVE", f"The engine generated a {rec_log_badge} signal, which is currently hidden by your '{strategy_filter}' setting.", "#333333")
+                    st.caption("Adjust your configuration panel strategy filter to view the omitted metrics.")
                 else:
                     if "🛑" in rec_log_badge: bg_color = "#FF4B4B"
                     elif "🔥" in rec_log_badge: bg_color = "#00CC66"
